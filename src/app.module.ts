@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import appConfig from './config/app.config';
 import cacheConfig from './config/cache.config';
 import cloudinaryConfig from './config/cloudinary.config';
 import authConfig from './config/auth.config';
+import rateLimitConfig from './config/rate-limit.config';
 import { validateEnv } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { CacheModule } from './cache/cache.module';
@@ -20,8 +23,19 @@ import { ServiceRequestsModule } from './modules/service-requests/service-reques
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, cacheConfig, cloudinaryConfig, authConfig],
+      load: [appConfig, cacheConfig, cloudinaryConfig, authConfig, rateLimitConfig],
       validate: validateEnv,
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [rateLimitConfig.KEY],
+      useFactory: (rateLimit: { ttl: number; limit: number }) => ({
+        throttlers: [
+          {
+            ttl: rateLimit.ttl,
+            limit: rateLimit.limit,
+          },
+        ],
+      }),
     }),
     PrismaModule,
     CacheModule,
@@ -33,6 +47,12 @@ import { ServiceRequestsModule } from './modules/service-requests/service-reques
     ServicesModule,
     SiteSettingsModule,
     ServiceRequestsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

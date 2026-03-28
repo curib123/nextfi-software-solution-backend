@@ -1,21 +1,29 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { AdminAccess } from '../../common/decorators/admin-access.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { UpdateSiteSettingsDto } from './dto/update-site-settings.dto';
 import { SiteSettingsService } from './site-settings.service';
 
-@Controller('site-settings')
+@Controller()
 export class SiteSettingsController {
   constructor(private readonly siteSettingsService: SiteSettingsService) {}
 
-  @Get()
+  @Get('site-settings')
   @ResponseMessage('Fetched successfully')
   findCurrent() {
     return this.siteSettingsService.findCurrent();
   }
 
-  @Patch()
-  @UseGuards(JwtAuthGuard)
+  @Get('admin/site-settings')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
+  @ResponseMessage('Fetched successfully')
+  findCurrentAdmin() {
+    return this.siteSettingsService.findCurrent();
+  }
+
+  @Patch('admin/site-settings')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
   @ResponseMessage('Operation successful')
   update(@Body() updateSiteSettingsDto: UpdateSiteSettingsDto) {
     return this.siteSettingsService.update(updateSiteSettingsDto);

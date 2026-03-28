@@ -87,7 +87,7 @@ export class ServicesService {
     return service;
   }
 
-  async findAll() {
+  async findAllPublic() {
     const cached = await this.cacheService.get<{ items: unknown[]; total: number }>(
       CACHE_KEYS.services,
     );
@@ -98,9 +98,12 @@ export class ServicesService {
 
     const [items, total] = await this.prismaService.$transaction([
       this.prismaService.service.findMany({
+        where: { status: ServiceStatus.PUBLISHED },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
       }),
-      this.prismaService.service.count(),
+      this.prismaService.service.count({
+        where: { status: ServiceStatus.PUBLISHED },
+      }),
     ]);
 
     const response = { items, total };
@@ -114,7 +117,18 @@ export class ServicesService {
     return response;
   }
 
-  async findOne(id: string): Promise<any> {
+  async findAllAdmin() {
+    const [items, total] = await this.prismaService.$transaction([
+      this.prismaService.service.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      }),
+      this.prismaService.service.count(),
+    ]);
+
+    return { items, total };
+  }
+
+  async findOnePublic(id: string): Promise<any> {
     const cacheKey = CACHE_KEYS.serviceById(id);
     const cached = await this.cacheService.get<any>(cacheKey);
     if (cached) {
@@ -122,7 +136,7 @@ export class ServicesService {
     }
 
     const service = await this.prismaService.service.findUnique({
-      where: { id },
+      where: { id, status: ServiceStatus.PUBLISHED },
     });
 
     if (!service) {
@@ -138,7 +152,19 @@ export class ServicesService {
     return service;
   }
 
-  async findBySlug(slug: string): Promise<any> {
+  async findOneAdmin(id: string): Promise<any> {
+    const service = await this.prismaService.service.findUnique({
+      where: { id },
+    });
+
+    if (!service) {
+      throw new NotFoundException('Service not found');
+    }
+
+    return service;
+  }
+
+  async findBySlugPublic(slug: string): Promise<any> {
     const normalizedSlug = slugify(slug);
     const cacheKey = CACHE_KEYS.serviceBySlug(normalizedSlug);
     const cached = await this.cacheService.get<any>(cacheKey);
@@ -147,7 +173,7 @@ export class ServicesService {
     }
 
     const service = await this.prismaService.service.findUnique({
-      where: { slug: normalizedSlug },
+      where: { slug: normalizedSlug, status: ServiceStatus.PUBLISHED },
     });
 
     if (!service) {
@@ -165,7 +191,7 @@ export class ServicesService {
 
   async update(id: string, updateServiceDto: UpdateServiceDto) {
     const payload = updateServiceDto as Partial<CreateServiceDto>;
-    const existing = await this.findOne(id);
+    const existing = await this.findOneAdmin(id);
     const nextSlug = payload.slug
       ? slugify(payload.slug)
       : payload.title
@@ -210,7 +236,7 @@ export class ServicesService {
   }
 
   async remove(id: string) {
-    const service = await this.findOne(id);
+    const service = await this.findOneAdmin(id);
     const mediaIds = [
       service.imagePublicId,
       service.heroImagePublicId,
@@ -234,7 +260,7 @@ export class ServicesService {
     kind: 'image' | 'heroImage' | 'ogImage',
   ) {
     this.ensureFile(file);
-    const service = await this.findOne(id);
+    const service = await this.findOneAdmin(id);
 
     const mapping = {
       image: {
@@ -278,7 +304,7 @@ export class ServicesService {
   }
 
   async deleteImageField(id: string, kind: 'image' | 'heroImage' | 'ogImage') {
-    const service = await this.findOne(id);
+    const service = await this.findOneAdmin(id);
 
     const mapping = {
       image: {

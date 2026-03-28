@@ -7,67 +7,81 @@ import {
   Patch,
   Post,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { AdminAccess } from '../../common/decorators/admin-access.decorator';
 import { ConfigService } from '@nestjs/config';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateProductImageDto } from './dto/create-product-image.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
 
-@Controller('products')
+@Controller()
 export class ProductsController {
   constructor(
     private readonly productsService: ProductsService,
     private readonly configService: ConfigService,
   ) {}
 
-  @Post()
-  @UseGuards(JwtAuthGuard)
+  @Post('admin/products')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
   @ResponseMessage('Operation successful')
   create(@Body() createProductDto: CreateProductDto) {
     return this.productsService.create(createProductDto);
   }
 
-  @Get()
+  @Get('products')
   @ResponseMessage('Fetched successfully')
   findAll() {
-    return this.productsService.findAll();
+    return this.productsService.findAllPublic();
   }
 
-  @Get('slug/:slug')
+  @Get('products/slug/:slug')
   @ResponseMessage('Fetched successfully')
   findBySlug(@Param('slug') slug: string) {
-    return this.productsService.findBySlug(slug);
+    return this.productsService.findBySlugPublic(slug);
   }
 
-  @Get(':id')
+  @Get('products/:id')
   @ResponseMessage('Fetched successfully')
   findOne(@Param('id') id: string) {
-    return this.productsService.findOne(id);
+    return this.productsService.findOnePublic(id);
   }
 
-  @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @Get('admin/products')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
+  @ResponseMessage('Fetched successfully')
+  findAllAdmin() {
+    return this.productsService.findAllAdmin();
+  }
+
+  @Get('admin/products/:id')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
+  @ResponseMessage('Fetched successfully')
+  findOneAdmin(@Param('id') id: string) {
+    return this.productsService.findOneAdmin(id);
+  }
+
+  @Patch('admin/products/:id')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
   @ResponseMessage('Operation successful')
   update(@Param('id') id: string, @Body() updateProductDto: UpdateProductDto) {
     return this.productsService.update(id, updateProductDto);
   }
 
-  @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @Delete('admin/products/:id')
+  @AdminAccess(UserRole.ADMIN)
   @ResponseMessage('Operation successful')
   remove(@Param('id') id: string) {
     return this.productsService.remove(id);
   }
 
-  @Post(':id/cover-image')
-  @UseGuards(JwtAuthGuard)
+  @Post('admin/products/:id/cover-image')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   @ResponseMessage('Operation successful')
   uploadCoverImage(@Param('id') id: string, @UploadedFile() file?: Express.Multer.File) {
@@ -78,15 +92,15 @@ export class ProductsController {
     );
   }
 
-  @Delete(':id/cover-image')
-  @UseGuards(JwtAuthGuard)
+  @Delete('admin/products/:id/cover-image')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
   @ResponseMessage('Operation successful')
   deleteCoverImage(@Param('id') id: string) {
     return this.productsService.deleteCoverImage(id);
   }
 
-  @Post(':id/images')
-  @UseGuards(JwtAuthGuard)
+  @Post('admin/products/:id/images')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   @ResponseMessage('Operation successful')
   addImage(
@@ -102,8 +116,8 @@ export class ProductsController {
     );
   }
 
-  @Delete(':id/images/:imageId')
-  @UseGuards(JwtAuthGuard)
+  @Delete('admin/products/:id/images/:imageId')
+  @AdminAccess(UserRole.ADMIN)
   @ResponseMessage('Operation successful')
   deleteImage(@Param('id') id: string, @Param('imageId') imageId: string) {
     return this.productsService.deleteImage(id, imageId);

@@ -1,8 +1,130 @@
-import { PrismaClient, ProductStatus, ServiceStatus } from '@prisma/client';
+import { hash } from 'bcryptjs';
+import { PrismaClient, ProductStatus, ServiceStatus, UserRole } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-async function main() {
+const permissionDefinitions = [
+  { key: 'auth.profile.read', description: 'View authenticated profile details.' },
+  { key: 'contact.read', description: 'Read contact submissions.' },
+  { key: 'newsletter.read', description: 'Read newsletter subscriptions.' },
+  { key: 'site-settings.read', description: 'Read site settings from admin.' },
+  { key: 'site-settings.update', description: 'Update site settings.' },
+  { key: 'service-requests.read', description: 'Read service requests.' },
+  { key: 'service-requests.update', description: 'Update service requests.' },
+  { key: 'service-requests.delete', description: 'Delete service requests.' },
+  { key: 'products.create', description: 'Create products.' },
+  { key: 'products.read', description: 'Read products from admin.' },
+  { key: 'products.update', description: 'Update products.' },
+  { key: 'products.delete', description: 'Delete products.' },
+  { key: 'products.media.update', description: 'Manage product media.' },
+  { key: 'services.create', description: 'Create services.' },
+  { key: 'services.read', description: 'Read services from admin.' },
+  { key: 'services.update', description: 'Update services.' },
+  { key: 'services.delete', description: 'Delete services.' },
+  { key: 'services.media.update', description: 'Manage service media.' },
+] as const;
+
+const staffPermissionKeys = new Set([
+  'auth.profile.read',
+  'contact.read',
+  'newsletter.read',
+  'site-settings.read',
+  'site-settings.update',
+  'service-requests.read',
+  'service-requests.update',
+  'products.create',
+  'products.read',
+  'products.update',
+  'products.media.update',
+  'services.create',
+  'services.read',
+  'services.update',
+  'services.media.update',
+]);
+
+async function seedRolesAndPermissions() {
+  const adminRole = await prisma.role.upsert({
+    where: { name: UserRole.ADMIN },
+    update: {
+      description: 'Default administrator role with full access.',
+    },
+    create: {
+      name: UserRole.ADMIN,
+      description: 'Default administrator role with full access.',
+    },
+  });
+
+  const staffRole = await prisma.role.upsert({
+    where: { name: UserRole.STAFF },
+    update: {
+      description: 'Default staff role for authenticated back office users.',
+    },
+    create: {
+      name: UserRole.STAFF,
+      description: 'Default staff role for authenticated back office users.',
+    },
+  });
+
+  for (const permission of permissionDefinitions) {
+    await prisma.permission.upsert({
+      where: { key: permission.key },
+      update: { description: permission.description },
+      create: permission,
+    });
+  }
+
+  const permissions = await prisma.permission.findMany();
+
+  await prisma.rolePermission.deleteMany({
+    where: { roleId: { in: [adminRole.id, staffRole.id] } },
+  });
+
+  await prisma.rolePermission.createMany({
+    data: permissions.map((permission) => ({
+      roleId: adminRole.id,
+      permissionId: permission.id,
+    })),
+    skipDuplicates: true,
+  });
+
+  await prisma.rolePermission.createMany({
+    data: permissions
+      .filter((permission) => staffPermissionKeys.has(permission.key))
+      .map((permission) => ({
+        roleId: staffRole.id,
+        permissionId: permission.id,
+      })),
+    skipDuplicates: true,
+  });
+
+  return { adminRole, staffRole };
+}
+
+async function seedDefaultAdmin(adminRoleId: string) {
+  const email = (process.env.DEFAULT_ADMIN_EMAIL ?? 'admin@example.com').trim().toLowerCase();
+  const fullName = (process.env.DEFAULT_ADMIN_NAME ?? 'Administrator').trim();
+  const password = process.env.DEFAULT_ADMIN_PASSWORD ?? 'change-this-password';
+  const passwordHash = await hash(password, 12);
+
+  await prisma.user.upsert({
+    where: { email },
+    update: {
+      fullName,
+      passwordHash,
+      roleId: adminRoleId,
+      isActive: true,
+    },
+    create: {
+      email,
+      fullName,
+      passwordHash,
+      roleId: adminRoleId,
+      isActive: true,
+    },
+  });
+}
+
+async function seedContent() {
   await prisma.siteSetting.upsert({
     where: { id: 'default-site-settings' },
     update: {
@@ -85,6 +207,12 @@ async function main() {
       sortOrder: 1,
     },
   });
+}
+
+async function main() {
+  const { adminRole } = await seedRolesAndPermissions();
+  await seedDefaultAdmin(adminRole.id);
+  await seedContent();
 }
 
 main()

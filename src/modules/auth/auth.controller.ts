@@ -1,42 +1,38 @@
-import { Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
-import { Response } from 'express';
+import { Body, Controller, Get, Post } from '@nestjs/common';
+import { AdminAccess } from '../../common/decorators/admin-access.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { RequestWithUser } from '../../common/types/request-with-user.type';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthService } from './auth.service';
-import { GoogleAuthGuard } from './guards/google-auth.guard';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Get('google')
-  @UseGuards(GoogleAuthGuard)
-  googleAuth() {
-    return null;
+  @Post('register')
+  @ResponseMessage('Registration successful')
+  register(@Body() registerDto: RegisterDto) {
+    return this.authService.register(registerDto);
   }
 
-  @Get('google/callback')
-  @UseGuards(GoogleAuthGuard)
+  @Post('login')
   @ResponseMessage('Login successful')
-  async googleAuthCallback(@Req() req: RequestWithUser, @Res() res: Response) {
-    const result = await this.authService.handleGoogleLogin(req.user as never);
-    return res.json({
-      success: true,
-      message: 'Login successful',
-      data: result,
-    });
+  login(@Body() loginDto: LoginDto) {
+    return this.authService.login(loginDto);
   }
 
   @Get('profile')
-  @UseGuards(JwtAuthGuard)
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
   @ResponseMessage('Fetched successfully')
   getProfile(@CurrentUser() user: RequestWithUser['user']) {
     return user;
   }
 
   @Post('logout')
+  @AdminAccess(UserRole.ADMIN, UserRole.STAFF)
   @ResponseMessage('Logout successful')
   logout() {
     return this.authService.logout();

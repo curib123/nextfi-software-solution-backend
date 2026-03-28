@@ -77,7 +77,7 @@ export class ProductsService {
     return product;
   }
 
-  async findAll() {
+  async findAllPublic() {
     const cached = await this.cacheService.get<{ items: unknown[]; total: number }>(
       CACHE_KEYS.products,
     );
@@ -88,10 +88,13 @@ export class ProductsService {
 
     const [items, total] = await this.prismaService.$transaction([
       this.prismaService.product.findMany({
+        where: { status: ProductStatus.PUBLISHED },
         orderBy: [{ createdAt: 'desc' }],
         include: { images: { orderBy: { sortOrder: 'asc' } } },
       }),
-      this.prismaService.product.count(),
+      this.prismaService.product.count({
+        where: { status: ProductStatus.PUBLISHED },
+      }),
     ]);
 
     const response = { items, total };
@@ -105,7 +108,19 @@ export class ProductsService {
     return response;
   }
 
-  async findOne(id: string): Promise<any> {
+  async findAllAdmin() {
+    const [items, total] = await this.prismaService.$transaction([
+      this.prismaService.product.findMany({
+        orderBy: [{ createdAt: 'desc' }],
+        include: { images: { orderBy: { sortOrder: 'asc' } } },
+      }),
+      this.prismaService.product.count(),
+    ]);
+
+    return { items, total };
+  }
+
+  async findOnePublic(id: string): Promise<any> {
     const cacheKey = CACHE_KEYS.productById(id);
     const cached = await this.cacheService.get<any>(cacheKey);
     if (cached) {
@@ -113,7 +128,7 @@ export class ProductsService {
     }
 
     const product = await this.prismaService.product.findUnique({
-      where: { id },
+      where: { id, status: ProductStatus.PUBLISHED },
       include: { images: { orderBy: { sortOrder: 'asc' } } },
     });
 
@@ -130,7 +145,20 @@ export class ProductsService {
     return product;
   }
 
-  async findBySlug(slug: string): Promise<any> {
+  async findOneAdmin(id: string): Promise<any> {
+    const product = await this.prismaService.product.findUnique({
+      where: { id },
+      include: { images: { orderBy: { sortOrder: 'asc' } } },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    return product;
+  }
+
+  async findBySlugPublic(slug: string): Promise<any> {
     const normalizedSlug = slugify(slug);
     const cacheKey = CACHE_KEYS.productBySlug(normalizedSlug);
     const cached = await this.cacheService.get<any>(cacheKey);
@@ -139,7 +167,7 @@ export class ProductsService {
     }
 
     const product = await this.prismaService.product.findUnique({
-      where: { slug: normalizedSlug },
+      where: { slug: normalizedSlug, status: ProductStatus.PUBLISHED },
       include: { images: { orderBy: { sortOrder: 'asc' } } },
     });
 
@@ -158,7 +186,7 @@ export class ProductsService {
 
   async update(id: string, updateProductDto: UpdateProductDto) {
     const payload = updateProductDto as Partial<CreateProductDto>;
-    const existing = await this.findOne(id);
+    const existing = await this.findOneAdmin(id);
     const nextSlug = payload.slug
       ? slugify(payload.slug)
       : payload.name
@@ -192,7 +220,7 @@ export class ProductsService {
   }
 
   async remove(id: string) {
-    const product = await this.findOne(id);
+    const product = await this.findOneAdmin(id);
 
     if (product.coverImagePublicId) {
       await this.mediaService.delete(product.coverImagePublicId);
@@ -214,7 +242,7 @@ export class ProductsService {
     folder: string,
   ) {
     this.ensureFile(file);
-    const product = await this.findOne(id);
+    const product = await this.findOneAdmin(id);
     const uploaded = await this.mediaService.replace(
       file.buffer,
       file.mimetype,
@@ -239,7 +267,7 @@ export class ProductsService {
   }
 
   async deleteCoverImage(id: string) {
-    const product = await this.findOne(id);
+    const product = await this.findOneAdmin(id);
 
     if (product.coverImagePublicId) {
       await this.mediaService.delete(product.coverImagePublicId);
@@ -265,7 +293,7 @@ export class ProductsService {
     folder: string,
   ) {
     this.ensureFile(file);
-    const product = await this.findOne(id);
+    const product = await this.findOneAdmin(id);
     const uploaded = await this.mediaService.upload(
       file.buffer,
       file.mimetype,
@@ -291,7 +319,7 @@ export class ProductsService {
   }
 
   async deleteImage(id: string, imageId: string) {
-    const product = await this.findOne(id);
+    const product = await this.findOneAdmin(id);
     const image = await this.prismaService.productImage.findFirst({
       where: { id: imageId, productId: id },
     });
